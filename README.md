@@ -11,7 +11,7 @@ Quick Pause is a practice and routing tool. Instead of the pause menu, it applie
 - **Pause hotkey:** a key (F5 to F12, F9 by default) that toggles the freeze. It is read every frame while the Hell2Modding overlay is closed. It starts a freeze during plain gameplay only, not over boon screens, the codex or the trait tray, or while you are dead, and it can always end one.
 - **Speed while paused:** a percentage of normal game speed. 0 is a full freeze.
 - **Block actions while paused:** stops attacks and dashes from queueing up.
-- **PAUSED indicator:** a line in the lower centre of the screen while paused.
+- **PAUSED indicator:** a small badge in the top-left corner while paused. It is drawn by the mod overlay, not the game HUD, so it shows at any speed, including a full freeze.
 
 The freeze is released when the module is disabled, when a new run starts and when you enter a room. If something in the game removes the freeze while you are paused, Quick Pause puts it back.
 

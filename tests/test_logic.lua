@@ -214,6 +214,76 @@ function TestWatchdog:testSignatureListsEveryRequestAndReportsChangesOnce()
     lu.assertTrue((logic.signatureChanged()))
 end
 
+TestIndicator = {}
+
+local function fakeImgui(shouldDraw)
+    local log = {}
+    local imgui = { log = log }
+    imgui.SetNextWindowPos = function(x, y) log[#log + 1] = { "pos", x, y } end
+    imgui.SetNextWindowBgAlpha = function(alpha) log[#log + 1] = { "alpha", alpha } end
+    imgui.Begin = function(name, flags)
+        log[#log + 1] = { "begin", name, flags }
+        return shouldDraw
+    end
+    imgui.SetWindowFontScale = function(scale) log[#log + 1] = { "scale", scale } end
+    imgui.TextColored = function(_, _, _, _, text) log[#log + 1] = { "text", text } end
+    imgui.End = function() log[#log + 1] = { "end" } end
+    return imgui
+end
+
+local function countOf(imgui, kind)
+    local count = 0
+    for _, entry in ipairs(imgui.log) do
+        if entry[1] == kind then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function TestIndicator:testDrawsPausedTextInsideOneBeginEndPair()
+    local imgui = fakeImgui(true)
+    logic.drawIndicator(imgui, {})
+
+    lu.assertEquals(countOf(imgui, "begin"), 1)
+    lu.assertEquals(countOf(imgui, "end"), 1)
+    lu.assertEquals(countOf(imgui, "text"), 1)
+    lu.assertEquals(imgui.log[1], { "pos", logic.INDICATOR_X, logic.INDICATOR_Y })
+    lu.assertEquals(imgui.log[#imgui.log - 1], { "text", logic.INDICATOR_TEXT })
+end
+
+function TestIndicator:testEndIsStillCalledWhenTheWindowIsCollapsed()
+    local imgui = fakeImgui(false)
+    logic.drawIndicator(imgui, {})
+
+    lu.assertEquals(countOf(imgui, "begin"), 1)
+    lu.assertEquals(countOf(imgui, "end"), 1)
+    lu.assertEquals(countOf(imgui, "text"), 0)
+end
+
+function TestIndicator:testOptionalImguiCallsAreSkippedWhenMissing()
+    local imgui = fakeImgui(true)
+    imgui.SetNextWindowBgAlpha = nil
+    imgui.SetWindowFontScale = nil
+    logic.drawIndicator(imgui, {})
+
+    lu.assertEquals(countOf(imgui, "alpha"), 0)
+    lu.assertEquals(countOf(imgui, "scale"), 0)
+    lu.assertEquals(countOf(imgui, "end"), 1)
+end
+
+function TestIndicator:testWindowFlagsFallBackToImguiBitValuesAndAcceptTheEngineTable()
+    local fallback = logic.indicatorWindowFlags(nil)
+    lu.assertEquals(fallback % 2, 1) -- NoTitleBar
+    lu.assertTrue(fallback >= 4096)
+
+    local custom = logic.indicatorWindowFlags({
+        NoTitleBar = 100, NoResize = 200, NoMove = 400, NoScrollbar = 800,
+        AlwaysAutoResize = 1600, NoSavedSettings = 3200, NoInputs = 6400, NoFocusOnAppearing = 12800,
+    })
+    lu.assertEquals(custom, 100 + 200 + 400 + 800 + 1600 + 3200 + 6400 + 12800)
+end
+
 TestStorage = {}
 
 function TestStorage:testStorageShapeAndDefaults()

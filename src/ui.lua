@@ -8,7 +8,7 @@ local SPEED_TOOLTIP =
     "Game speed while paused, as a percentage of normal. 0 is a full freeze."
 local INPUT_TOOLTIP =
     "Block attacks, dashes and other actions while paused so nothing queues up."
-local INDICATOR_TOOLTIP = "Show a PAUSED line in the lower centre of the screen while paused."
+local INDICATOR_TOOLTIP = "Show a PAUSED badge in the top-left corner of the screen while paused."
 
 function module.drawTab(draw, state, data)
     local widgets = draw.widgets

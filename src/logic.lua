@@ -12,6 +12,11 @@ logic.LERP_TIME = 0.0001
 -- The engine has been seen returning to normal speed a couple of seconds into a freeze while the game's
 -- own request list still holds ours, so the current speed is re-sent to the engine at this interval.
 logic.REASSERT_SECONDS = 0.25
+-- The PAUSED badge is drawn with ImGui, not the game HUD: HUD fades run on game time, so at a speed of
+-- 0.001 a game-drawn label would take minutes to appear.
+logic.INDICATOR_X = 24
+logic.INDICATOR_Y = 24
+logic.INDICATOR_TEXT = "PAUSED"
 logic.PROBE_SECONDS = 1.0
 
 local state = {
@@ -143,6 +148,35 @@ function logic.measureSpeed(previous, current)
     }
 end
 
+--- Window flags for a small non-interactive badge. Flags are distinct bits, so adding them is a bitwise OR.
+function logic.indicatorWindowFlags(flagTable)
+    flagTable = flagTable or {}
+    return (flagTable.NoTitleBar or 1)
+        + (flagTable.NoResize or 2)
+        + (flagTable.NoMove or 4)
+        + (flagTable.NoScrollbar or 8)
+        + (flagTable.AlwaysAutoResize or 64)
+        + (flagTable.NoSavedSettings or 256)
+        + (flagTable.NoInputs or (512 + 65536 + 131072))
+        + (flagTable.NoFocusOnAppearing or 4096)
+end
+
+--- Draw the PAUSED badge. Begin/End are always paired; the extras are best effort.
+function logic.drawIndicator(imgui, windowFlagTable)
+    imgui.SetNextWindowPos(logic.INDICATOR_X, logic.INDICATOR_Y)
+    if imgui.SetNextWindowBgAlpha ~= nil then
+        imgui.SetNextWindowBgAlpha(0.55)
+    end
+    local shouldDraw = imgui.Begin("Quick Pause##indicator", logic.indicatorWindowFlags(windowFlagTable))
+    if shouldDraw then
+        if imgui.SetWindowFontScale ~= nil then
+            imgui.SetWindowFontScale(1.8)
+        end
+        imgui.TextColored(1.0, 0.82, 0.2, 1.0, logic.INDICATOR_TEXT)
+    end
+    imgui.End()
+end
+
 --- "name=fraction" list of every active simulation-speed request, for diagnostics.
 function logic.simSpeedSignature()
     local changes = MapState ~= nil and MapState.SimSpeedChanges or nil
@@ -264,6 +298,10 @@ function logic.attach(module)
                         speed.worldSeconds, speed.systemSeconds, speed.worldPerSystem)
                 end
             end
+
+            if runtime.data.read("ShowIndicator") == true then
+                logic.drawIndicator(rom.ImGui, rom.ImGuiWindowFlags)
+            end
         else
             timing.sample = nil
         end
@@ -279,31 +317,6 @@ function logic.attach(module)
             local nowPaused = logic.toggle(logic.readSettings(runtime))
             host.logIf("hotkey toggled pause -> %s (%s)", tostring(nowPaused), logic.simSpeedSignature())
         end
-    end)
-
-    local overlays = module.overlays
-    overlays.createLine("state", {
-        componentName = "QuickPause_Indicator",
-        region = "centerLowerStack",
-        order = overlays.order.module + 10,
-        visible = function(host, runtime)
-            return host.isEnabled() and runtime.data.read("ShowIndicator") == true and logic.isPaused()
-        end,
-        columns = {
-            {
-                key = "text",
-                minWidth = 200,
-                justify = "Center",
-                textArgs = {
-                    Color = { 1.0, 0.82, 0.2, 1.0 },
-                    FontSize = 22,
-                },
-            },
-        },
-    })
-    overlays.onInterval("state", 0.1, function(_, _, overlay)
-        overlay.setLine("state", { text = "PAUSED" })
-        overlay.refresh("state")
     end)
 end
 
