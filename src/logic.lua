@@ -1,5 +1,6 @@
 -- luacheck: globals AddSimSpeedChange RemoveSimSpeedChange AddInputBlock RemoveInputBlock CurrentRun
 -- luacheck: globals ActiveScreens SessionMapState MapState IsEmpty AdamantQuickPause_Anchor
+-- luacheck: globals UpdateSimulationSpeed GetTime _worldTime
 
 local logic = {}
 
@@ -8,6 +9,10 @@ logic.INPUT_BLOCK_NAME = "AdamantQuickPause"
 -- The engine slows simulation speed by a fraction; a true zero is avoided in case it is rejected.
 logic.MIN_FRACTION = 0.001
 logic.LERP_TIME = 0.0001
+-- The engine has been seen returning to normal speed a couple of seconds into a freeze while the game's
+-- own request list still holds ours, so the current speed is re-sent to the engine at this interval.
+logic.REASSERT_SECONDS = 0.25
+logic.PROBE_SECONDS = 1.0
 
 local state = {
     paused = false,
@@ -102,6 +107,42 @@ function logic.ensureApplied(settings)
     return true
 end
 
+--- Re-send the lowest active speed request to the engine (UpdateSimulationSpeed forwards it to
+--- AdjustSimulationSpeed). Returns true when a request was sent.
+function logic.reassert()
+    if not state.paused or UpdateSimulationSpeed == nil then
+        return false
+    end
+    UpdateSimulationSpeed(logic.SIM_SPEED_NAME, { LerpTime = logic.LERP_TIME })
+    return true
+end
+
+--- Game clocks for measuring real speed: _worldTime follows the simulation, GetTime({}) is system time.
+function logic.sampleClocks()
+    local ok, systemTime = pcall(GetTime, {})
+    return {
+        world = type(_worldTime) == "number" and _worldTime or nil,
+        system = ok and type(systemTime) == "number" and systemTime or nil,
+    }
+end
+
+--- Speed ratios between two samples; nil when a clock is missing or no time passed.
+function logic.measureSpeed(previous, current)
+    if previous == nil or current == nil then
+        return nil
+    end
+    local function ratio(a, b)
+        return a ~= nil and b ~= nil and a > 0 and b / a or nil
+    end
+    local system = previous.system ~= nil and current.system ~= nil and current.system - previous.system or nil
+    local world = previous.world ~= nil and current.world ~= nil and current.world - previous.world or nil
+    return {
+        systemSeconds = system,
+        worldSeconds = world,
+        worldPerSystem = ratio(system, world),
+    }
+end
+
 --- "name=fraction" list of every active simulation-speed request, for diagnostics.
 function logic.simSpeedSignature()
     local changes = MapState ~= nil and MapState.SimSpeedChanges or nil
@@ -191,6 +232,8 @@ function logic.attach(module)
         return baseFunc(...)
     end)
 
+    local timing = { lastReassert = 0, lastProbe = 0, sample = nil }
+
     installTick(function()
         local host, runtime = live.host, live.runtime
         if host == nil or runtime == nil or not host.isEnabled() then
@@ -205,6 +248,24 @@ function logic.attach(module)
             if changed then
                 host.logIf("sim speed requests while paused: %s", signature)
             end
+
+            local now = os.clock()
+            if now - timing.lastReassert >= logic.REASSERT_SECONDS then
+                timing.lastReassert = now
+                logic.reassert()
+            end
+            if now - timing.lastProbe >= logic.PROBE_SECONDS then
+                timing.lastProbe = now
+                local current = logic.sampleClocks()
+                local speed = logic.measureSpeed(timing.sample, current)
+                timing.sample = current
+                if speed ~= nil and speed.worldPerSystem ~= nil then
+                    host.logIf("measured speed while paused: world %.3fs over system %.3fs = x%.3f",
+                        speed.worldSeconds, speed.systemSeconds, speed.worldPerSystem)
+                end
+            end
+        else
+            timing.sample = nil
         end
 
         if rom.gui.is_open() == true then

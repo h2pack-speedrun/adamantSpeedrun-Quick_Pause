@@ -177,6 +177,29 @@ function TestWatchdog:testNothingHappensWhenNotPausedOrWithoutMapState()
     lu.assertFalse(logic.ensureApplied({ speedPercent = 0 }))
 end
 
+function TestWatchdog:testReassertResendsTheSpeedOnlyWhilePaused()
+    local updates = {}
+    _G.UpdateSimulationSpeed = function(name, args)
+        updates[#updates + 1] = { name = name, args = args }
+    end
+    lu.assertFalse(logic.reassert())
+
+    logic.pause({ speedPercent = 0 })
+    lu.assertTrue(logic.reassert())
+    lu.assertEquals(#updates, 1)
+    lu.assertEquals(updates[1].name, logic.SIM_SPEED_NAME)
+    lu.assertEquals(updates[1].args.LerpTime, logic.LERP_TIME)
+    _G.UpdateSimulationSpeed = nil
+end
+
+function TestWatchdog:testMeasureSpeedComparesWorldTimeToSystemTime()
+    local speed = logic.measureSpeed({ system = 10, world = 100 }, { system = 11, world = 100.002 })
+    lu.assertAlmostEquals(speed.worldPerSystem, 0.002, 1e-9)
+    lu.assertAlmostEquals(speed.systemSeconds, 1, 1e-9)
+    lu.assertNil(logic.measureSpeed(nil, { system = 1, world = 1 }))
+    lu.assertNil(logic.measureSpeed({ system = 1 }, { system = 2 }).worldPerSystem)
+end
+
 function TestWatchdog:testSignatureListsEveryRequestAndReportsChangesOnce()
     logic.pause({ speedPercent = 0 })
     _G.MapState.SimSpeedChanges.WeaponHit = { Fraction = 0.1 }
