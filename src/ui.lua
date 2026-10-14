@@ -19,12 +19,12 @@ function module.drawTab(draw, state, data)
         displayValues = data.hotkeyDisplayValues,
         controlWidth = 140,
     })
-    widgets.stepper(state.get("SpeedPercent"), {
+    widgets.slider(state.get("SpeedPercent"), {
         label = "Speed while paused (%)",
         tooltip = SPEED_TOOLTIP,
         min = data.speedPercent.min,
         max = data.speedPercent.max,
-        step = 5,
+        controlWidth = 220,
     })
     widgets.checkbox(state.get("BlockInput"), {
         label = "Block actions while paused",
