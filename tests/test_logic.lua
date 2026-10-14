@@ -24,14 +24,11 @@ end
 local function clearGameStubs()
     _G.AddSimSpeedChange, _G.RemoveSimSpeedChange = nil, nil
     _G.AddInputBlock, _G.RemoveInputBlock = nil, nil
+    _G.MapState = nil
 end
 
 local function gameplayContext(overrides)
     local context = {
-        baseBlocked = false,
-        enabled = true,
-        escapeToggle = true,
-        shiftHeld = false,
         hasRun = true,
         handlingDeath = false,
         openScreenCount = 0,
@@ -57,35 +54,16 @@ function TestFractionForPercent:testMissingValueFreezes()
     lu.assertEquals(logic.fractionForPercent(nil), logic.MIN_FRACTION)
 end
 
-TestDecideEscape = {}
+TestCanToggle = {}
 
-function TestDecideEscape:testEscapeIsTakenOverDuringPlainGameplay()
-    local decision = logic.decideEscape(gameplayContext())
-    lu.assertTrue(decision.blocked)
-    lu.assertTrue(decision.toggle)
+function TestCanToggle:testAllowedDuringPlainGameplay()
+    lu.assertTrue(logic.canToggle(gameplayContext()))
 end
 
-function TestDecideEscape:testAlreadyBlockedPassesThroughUntouched()
-    local decision = logic.decideEscape(gameplayContext({ baseBlocked = true }))
-    lu.assertTrue(decision.blocked)
-    lu.assertFalse(decision.toggle)
-end
-
-function TestDecideEscape:testShiftEscapeKeepsTheRealPauseMenu()
-    local decision = logic.decideEscape(gameplayContext({ shiftHeld = true }))
-    lu.assertFalse(decision.blocked)
-    lu.assertFalse(decision.toggle)
-end
-
-function TestDecideEscape:testDisabledModuleOrOptionKeepsTheRealPauseMenu()
-    lu.assertFalse(logic.decideEscape(gameplayContext({ enabled = false })).toggle)
-    lu.assertFalse(logic.decideEscape(gameplayContext({ escapeToggle = false })).toggle)
-end
-
-function TestDecideEscape:testOpenScreensDeathAndNoRunKeepNormalBehaviour()
-    lu.assertFalse(logic.decideEscape(gameplayContext({ openScreenCount = 1 })).toggle)
-    lu.assertFalse(logic.decideEscape(gameplayContext({ handlingDeath = true })).toggle)
-    lu.assertFalse(logic.decideEscape(gameplayContext({ hasRun = false })).toggle)
+function TestCanToggle:testOpenScreensDeathAndNoRunBlockStartingAFreeze()
+    lu.assertFalse(logic.canToggle(gameplayContext({ openScreenCount = 1 })))
+    lu.assertFalse(logic.canToggle(gameplayContext({ handlingDeath = true })))
+    lu.assertFalse(logic.canToggle(gameplayContext({ hasRun = false })))
 end
 
 TestPauseState = {}
@@ -153,6 +131,66 @@ function TestPauseState:testSlowModeUsesTheConfiguredFraction()
     lu.assertAlmostEquals(calls.sim[1].args.Fraction, 0.4, 1e-9)
 end
 
+TestWatchdog = {}
+
+function TestWatchdog:setUp()
+    installGameStubs()
+    logic.resume()
+    -- Mirror the game: AddSimSpeedChange records the request in MapState.SimSpeedChanges.
+    _G.MapState = { SimSpeedChanges = {} }
+    _G.AddSimSpeedChange = function(name, args)
+        calls.sim[#calls.sim + 1] = { name = name, args = args }
+        _G.MapState.SimSpeedChanges[name] = args
+    end
+    _G.RemoveSimSpeedChange = function(name)
+        if _G.MapState ~= nil then
+            _G.MapState.SimSpeedChanges[name] = nil
+        end
+    end
+end
+
+function TestWatchdog:tearDown()
+    logic.resume()
+    clearGameStubs()
+end
+
+function TestWatchdog:testNothingToDoWhileTheFreezeIsIntact()
+    logic.pause({ speedPercent = 0 })
+    lu.assertFalse(logic.ensureApplied({ speedPercent = 0 }))
+    lu.assertEquals(#calls.sim, 1)
+end
+
+function TestWatchdog:testFreezeIsReappliedWhenTheGameDropsIt()
+    logic.pause({ speedPercent = 0 })
+    _G.MapState.SimSpeedChanges = {} -- ClearSimSpeedChanges / a map-state reset
+
+    lu.assertTrue(logic.ensureApplied({ speedPercent = 0 }))
+    lu.assertEquals(#calls.sim, 2)
+    lu.assertEquals(_G.MapState.SimSpeedChanges[logic.SIM_SPEED_NAME].Fraction, logic.MIN_FRACTION)
+end
+
+function TestWatchdog:testNothingHappensWhenNotPausedOrWithoutMapState()
+    lu.assertFalse(logic.ensureApplied({ speedPercent = 0 }))
+
+    logic.pause({ speedPercent = 0 })
+    _G.MapState = nil
+    lu.assertFalse(logic.ensureApplied({ speedPercent = 0 }))
+end
+
+function TestWatchdog:testSignatureListsEveryRequestAndReportsChangesOnce()
+    logic.pause({ speedPercent = 0 })
+    _G.MapState.SimSpeedChanges.WeaponHit = { Fraction = 0.1 }
+
+    local changed, signature = logic.signatureChanged()
+    lu.assertTrue(changed)
+    lu.assertStrContains(signature, "WeaponHit=0.1")
+    lu.assertStrContains(signature, logic.SIM_SPEED_NAME .. "=" .. tostring(logic.MIN_FRACTION))
+
+    lu.assertFalse((logic.signatureChanged()))
+    _G.MapState.SimSpeedChanges.WeaponHit = nil
+    lu.assertTrue((logic.signatureChanged()))
+end
+
 TestStorage = {}
 
 function TestStorage:testStorageShapeAndDefaults()
@@ -162,8 +200,8 @@ function TestStorage:testStorageShapeAndDefaults()
         byAlias[node.alias] = node
     end
 
-    lu.assertEquals(byAlias.EscapeToggle.default, true)
-    lu.assertEquals(byAlias.Hotkey.default, "")
+    lu.assertNil(byAlias.EscapeToggle)
+    lu.assertEquals(byAlias.Hotkey.default, "F9")
     lu.assertEquals(byAlias.SpeedPercent.default, 0)
     lu.assertEquals(byAlias.BlockInput.default, false)
     lu.assertEquals(byAlias.ShowIndicator.default, true)

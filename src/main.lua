@@ -28,7 +28,7 @@ local function init()
         id = MODULE_ID,
         name = "Quick Pause",
         shortName = "Quick Pause",
-        tooltip = "Freeze or slow the game with Escape or a hotkey, without opening the pause menu.",
+        tooltip = "Freeze or slow the game with a hotkey, without opening the pause menu.",
         hash = false,
         modpack = PACK_ID,
     })

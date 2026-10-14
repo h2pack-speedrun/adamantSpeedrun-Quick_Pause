@@ -1,5 +1,5 @@
 -- luacheck: globals AddSimSpeedChange RemoveSimSpeedChange AddInputBlock RemoveInputBlock CurrentRun
--- luacheck: globals ActiveScreens SessionMapState IsEmpty AdamantQuickPause_Anchor
+-- luacheck: globals ActiveScreens SessionMapState MapState IsEmpty AdamantQuickPause_Anchor
 
 local logic = {}
 
@@ -12,6 +12,7 @@ logic.LERP_TIME = 0.0001
 local state = {
     paused = false,
     inputBlocked = false,
+    lastSignature = nil,
 }
 
 function logic.isPaused()
@@ -27,30 +28,12 @@ function logic.fractionForPercent(percent)
     return fraction
 end
 
---- Only intercept Escape during plain gameplay: a run is active, the player is alive, and no screen
---- (boon choice, codex, trait tray, ...) is open. Anything else keeps its normal Escape behaviour.
-function logic.canIntercept(context)
+--- Only toggle during plain gameplay: a run is active, the player is alive, and no screen
+--- (boon choice, codex, trait tray, ...) is open.
+function logic.canToggle(context)
     return context.hasRun == true
         and context.handlingDeath ~= true
         and context.openScreenCount == 0
-end
-
---- Decide what the IsPauseBlocked wrapper returns. `baseBlocked` is what the game (and any earlier
---- wrapper) decided; Escape is only taken over when it would otherwise have opened the pause menu.
-function logic.decideEscape(context)
-    if context.baseBlocked ~= false then
-        return { blocked = context.baseBlocked, toggle = false }
-    end
-    if not (context.enabled and context.escapeToggle) then
-        return { blocked = context.baseBlocked, toggle = false }
-    end
-    if context.shiftHeld then
-        return { blocked = context.baseBlocked, toggle = false }
-    end
-    if not logic.canIntercept(context) then
-        return { blocked = context.baseBlocked, toggle = false }
-    end
-    return { blocked = true, toggle = true }
 end
 
 function logic.readGameContext()
@@ -62,20 +45,25 @@ function logic.readGameContext()
     }
 end
 
-function logic.pause(settings)
-    if state.paused then
-        return
-    end
+local function applySimSpeed(settings)
     AddSimSpeedChange(logic.SIM_SPEED_NAME, {
         Fraction = logic.fractionForPercent(settings.speedPercent),
         LerpTime = logic.LERP_TIME,
         Priority = true,
     })
+end
+
+function logic.pause(settings)
+    if state.paused then
+        return
+    end
+    applySimSpeed(settings)
     if settings.blockInput then
         AddInputBlock({ Name = logic.INPUT_BLOCK_NAME })
         state.inputBlocked = true
     end
     state.paused = true
+    state.lastSignature = nil
 end
 
 function logic.resume()
@@ -96,6 +84,49 @@ function logic.toggle(settings)
     else
         logic.pause(settings)
     end
+    return state.paused
+end
+
+--- The game keeps its simulation-speed requests in MapState.SimSpeedChanges. If ours disappears while
+--- paused (a map-state reset, ClearSimSpeedChanges), put it back so the freeze lasts until toggled off.
+--- Returns true when the freeze had to be re-applied.
+function logic.ensureApplied(settings)
+    if not state.paused then
+        return false
+    end
+    local changes = MapState ~= nil and MapState.SimSpeedChanges or nil
+    if changes == nil or changes[logic.SIM_SPEED_NAME] ~= nil then
+        return false
+    end
+    applySimSpeed(settings)
+    return true
+end
+
+--- "name=fraction" list of every active simulation-speed request, for diagnostics.
+function logic.simSpeedSignature()
+    local changes = MapState ~= nil and MapState.SimSpeedChanges or nil
+    if changes == nil then
+        return "(no map state)"
+    end
+    local parts = {}
+    for name, change in pairs(changes) do
+        parts[#parts + 1] = string.format("%s=%s", tostring(name), tostring(change.Fraction))
+    end
+    table.sort(parts)
+    return #parts > 0 and table.concat(parts, ", ") or "(none)"
+end
+
+--- True once per change of the signature while paused, so a debug log shows who else touched speed.
+function logic.signatureChanged()
+    if not state.paused then
+        return false, nil
+    end
+    local signature = logic.simSpeedSignature()
+    if signature == state.lastSignature then
+        return false, signature
+    end
+    state.lastSignature = signature
+    return true, signature
 end
 
 function logic.readSettings(runtime)
@@ -113,11 +144,6 @@ local function resolveKey(name)
         return nil
     end
     return keys[name] or keys["ImGuiKey_" .. name]
-end
-
-local function isKeyDown(name)
-    local key = resolveKey(name)
-    return key ~= nil and rom.ImGui.IsKeyDown(key) == true
 end
 
 local function installTick(tick)
@@ -143,7 +169,7 @@ local function installTick(tick)
 end
 
 function logic.attach(module)
-    local live = { host = nil, runtime = nil, shiftHeld = false }
+    local live = { host = nil, runtime = nil }
 
     module.onActivate(function(host, runtime)
         live.host = host
@@ -165,26 +191,22 @@ function logic.attach(module)
         return baseFunc(...)
     end)
 
-    module.hooks.wrap("IsPauseBlocked", function(host, runtime, baseFunc, ...)
-        local baseBlocked = baseFunc(...)
-        local context = logic.readGameContext()
-        context.baseBlocked = baseBlocked
-        context.enabled = host.isEnabled()
-        context.escapeToggle = runtime.data.read("EscapeToggle")
-        context.shiftHeld = live.shiftHeld
-        local decision = logic.decideEscape(context)
-        if decision.toggle then
-            logic.toggle(logic.readSettings(runtime))
-        end
-        return decision.blocked
-    end)
-
     installTick(function()
-        live.shiftHeld = isKeyDown("LeftShift") or isKeyDown("RightShift")
         local host, runtime = live.host, live.runtime
         if host == nil or runtime == nil or not host.isEnabled() then
             return
         end
+
+        if logic.isPaused() then
+            if logic.ensureApplied(logic.readSettings(runtime)) then
+                host.logIf("freeze was removed from MapState.SimSpeedChanges; re-applied")
+            end
+            local changed, signature = logic.signatureChanged()
+            if changed then
+                host.logIf("sim speed requests while paused: %s", signature)
+            end
+        end
+
         if rom.gui.is_open() == true then
             return
         end
@@ -192,8 +214,9 @@ function logic.attach(module)
         if hotkey == nil or rom.ImGui.IsKeyPressed(hotkey, false) ~= true then
             return
         end
-        if logic.canIntercept(logic.readGameContext()) then
-            logic.toggle(logic.readSettings(runtime))
+        if logic.isPaused() or logic.canToggle(logic.readGameContext()) then
+            local nowPaused = logic.toggle(logic.readSettings(runtime))
+            host.logIf("hotkey toggled pause -> %s (%s)", tostring(nowPaused), logic.simSpeedSignature())
         end
     end)
 

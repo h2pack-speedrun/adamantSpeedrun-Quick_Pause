@@ -1,6 +1,7 @@
 local data = {}
 
 data.HOTKEY_NONE = ""
+data.HOTKEY_DEFAULT = "F9"
 -- F1 opens the Hell2Modding overlay, so it is not offered.
 data.hotkeyValues = { data.HOTKEY_NONE, "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" }
 data.hotkeyDisplayValues = { [data.HOTKEY_NONE] = "None" }
@@ -14,14 +15,9 @@ data.speedPercent = {
 function data.buildStorage()
     return {
         {
-            type = "bool",
-            alias = "EscapeToggle",
-            default = true,
-        },
-        {
             type = "string",
             alias = "Hotkey",
-            default = data.HOTKEY_NONE,
+            default = data.HOTKEY_DEFAULT,
             maxLen = 8,
         },
         {

@@ -6,7 +6,7 @@ schemaVersion = "0.0.1"
 namespace = "adamantSpeedrun"
 name = "Quick_Pause"
 versionNumber = "0.0.1"
-description = "Freeze or slow the game with Escape or a hotkey, without opening the pause menu."
+description = "Freeze or slow the game with a hotkey, without opening the pause menu."
 websiteUrl = "https://github.com/h2pack-speedrun/adamantSpeedrun-Quick_Pause"
 containsNsfwContent = false
 
