@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-14
+
+### Fixed
+
+- update the module icon (65bc74a)
+
 ## [1.0.0] - 2026-10-14
 
 ### Added
