@@ -1,24 +1,14 @@
 local module = {}
 
-local HOTKEY_TOOLTIP =
-    "Key that toggles the freeze without opening the pause menu. Checked every frame while the "
-    .. "Hell2Modding overlay is closed. It starts a freeze during plain gameplay only (not over boon "
-    .. "screens, the codex or the trait tray, or while dead), and it can always end one."
 local SPEED_TOOLTIP =
     "Game speed while paused, as a percentage of normal. 0 is a full freeze."
 local INPUT_TOOLTIP =
     "Block attacks, dashes and other actions while paused so nothing queues up."
 local INDICATOR_TOOLTIP = "Show a PAUSED badge in the top-left corner of the screen while paused."
 
-function module.drawTab(draw, state, data)
+function module.drawTab(draw, state, data, hotkeys)
     local widgets = draw.widgets
-    widgets.dropdown(state.get("Hotkey"), {
-        label = "Pause hotkey",
-        tooltip = HOTKEY_TOOLTIP,
-        values = data.hotkeyValues,
-        displayValues = data.hotkeyDisplayValues,
-        controlWidth = 140,
-    })
+    widgets.hotkey(hotkeys.get(data.HOTKEY_ID))
     widgets.slider(state.get("SpeedPercent"), {
         label = "Speed while paused (%)",
         tooltip = SPEED_TOOLTIP,
@@ -38,7 +28,7 @@ end
 
 function module.attach(libModule, data)
     libModule.ui.tab(function(_, ui)
-        return module.drawTab(ui.draw, ui.data, data)
+        return module.drawTab(ui.draw, ui.data, data, ui.hotkeys)
     end)
 end
 

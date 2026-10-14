@@ -294,13 +294,76 @@ function TestStorage:testStorageShapeAndDefaults()
     end
 
     lu.assertNil(byAlias.EscapeToggle)
-    lu.assertEquals(byAlias.Hotkey.default, "F9")
+    -- The pause key is Lib-managed hotkey storage, not module data.
+    lu.assertNil(byAlias.Hotkey)
     lu.assertEquals(byAlias.SpeedPercent.default, 0)
     lu.assertEquals(byAlias.BlockInput.default, false)
     lu.assertEquals(byAlias.ShowIndicator.default, true)
 end
 
-function TestStorage:testHotkeyDefaultIsOfferedAsNone()
-    lu.assertEquals(data.hotkeyValues[1], data.HOTKEY_NONE)
-    lu.assertEquals(data.hotkeyDisplayValues[data.HOTKEY_NONE], "None")
+TestHotkey = {}
+
+local function fakeModule()
+    local module = { requests = {}, hooks = {}, activate = nil }
+    module.hotkeys = {
+        request = function(id, opts)
+            module.requests[id] = opts
+        end,
+    }
+    module.onActivate = function() end
+    module.onCommit = function() end
+    module.hooks.wrap = function() end
+    return module
+end
+
+function TestHotkey:setUp()
+    installGameStubs()
+    _G.rom = { gui = { add_always_draw_imgui = function() end } }
+    _G.AdamantQuickPause_Anchor = nil
+end
+
+function TestHotkey:tearDown()
+    logic.resume()
+    clearGameStubs()
+    _G.rom = nil
+    _G.AdamantQuickPause_Anchor = nil
+end
+
+function TestHotkey:testAttachRequestsThePauseKeyKeepingTheSavedAlias()
+    local module = fakeModule()
+    logic.attach(module, data)
+    local request = module.requests[data.HOTKEY_ID]
+    lu.assertNotNil(request)
+    lu.assertEquals(request.alias, "Hotkey")
+    lu.assertEquals(request.default, "F9")
+    lu.assertEquals(request.label, "Pause hotkey")
+    lu.assertEquals(type(request.onPress), "function")
+end
+
+function TestHotkey:testPressStartsAFreezeDuringGameplayAndAlwaysEndsOne()
+    local host = { logIf = function() end }
+    local runtime = {
+        data = {
+            read = function(alias)
+                return ({ SpeedPercent = 0, BlockInput = false })[alias]
+            end,
+        },
+    }
+    local originalRead = logic.readGameContext
+    logic.readGameContext = function()
+        return gameplayContext({ openScreenCount = 1 })
+    end
+    logic.onPausePressed(host, runtime)
+    lu.assertFalse(logic.isPaused())
+    logic.readGameContext = function()
+        return gameplayContext()
+    end
+    logic.onPausePressed(host, runtime)
+    lu.assertTrue(logic.isPaused())
+    logic.readGameContext = function()
+        return gameplayContext({ openScreenCount = 1 })
+    end
+    logic.onPausePressed(host, runtime)
+    lu.assertFalse(logic.isPaused())
+    logic.readGameContext = originalRead
 end

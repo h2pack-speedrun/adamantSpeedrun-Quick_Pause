@@ -213,14 +213,6 @@ end
 
 -- Hot-reload-stable anchor: the always-draw callback is registered once per game session and calls
 -- whatever tick is installed, so a reload replaces behavior without registering a second callback.
-local function resolveKey(name)
-    local keys = rom.ImGuiKey
-    if type(keys) ~= "table" or name == nil or name == "" then
-        return nil
-    end
-    return keys[name] or keys["ImGuiKey_" .. name]
-end
-
 local function installTick(tick)
     AdamantQuickPause_Anchor = AdamantQuickPause_Anchor or {}
     local anchor = AdamantQuickPause_Anchor
@@ -237,14 +229,29 @@ local function installTick(tick)
             if not ok then
                 -- Report once instead of every frame; a reload installs a fresh tick and clears this.
                 anchor.failed = true
-                print("[Quick_Pause] hotkey tick disabled: " .. tostring(err))
+                print("[Quick_Pause] pause upkeep tick disabled: " .. tostring(err))
             end
         end)
     end
 end
 
-function logic.attach(module)
+local HOTKEY_TOOLTIP =
+    "Key that toggles the freeze without opening the pause menu. It starts a freeze during plain "
+    .. "gameplay only (not over boon screens, the codex or the trait tray, or while dead), and it can "
+    .. "always end one."
+
+function logic.attach(module, data)
     local live = { host = nil, runtime = nil }
+
+    module.hotkeys.request(data.HOTKEY_ID, {
+        label = "Pause hotkey",
+        default = data.HOTKEY_DEFAULT,
+        alias = data.HOTKEY_ALIAS,
+        tooltip = HOTKEY_TOOLTIP,
+        onPress = function(host, runtime)
+            logic.onPausePressed(host, runtime)
+        end,
+    })
 
     module.onActivate(function(host, runtime)
         live.host = host
@@ -305,19 +312,15 @@ function logic.attach(module)
         else
             timing.sample = nil
         end
-
-        if rom.gui.is_open() == true then
-            return
-        end
-        local hotkey = resolveKey(runtime.data.read("Hotkey"))
-        if hotkey == nil or rom.ImGui.IsKeyPressed(hotkey, false) ~= true then
-            return
-        end
-        if logic.isPaused() or logic.canToggle(logic.readGameContext()) then
-            local nowPaused = logic.toggle(logic.readSettings(runtime))
-            host.logIf("hotkey toggled pause -> %s (%s)", tostring(nowPaused), logic.simSpeedSignature())
-        end
     end)
+end
+
+--- The pause key: starts a freeze only during plain gameplay, and can always end one.
+function logic.onPausePressed(host, runtime)
+    if logic.isPaused() or logic.canToggle(logic.readGameContext()) then
+        local nowPaused = logic.toggle(logic.readSettings(runtime))
+        host.logIf("hotkey toggled pause -> %s (%s)", tostring(nowPaused), logic.simSpeedSignature())
+    end
 end
 
 return logic
