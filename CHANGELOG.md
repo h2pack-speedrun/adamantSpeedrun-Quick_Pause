@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-15
+
+### Added
+
+- use Lib-managed hotkeys for the pause key (
+e9e6f8)
+
+### Changed
+
+- let ModpackLib draw the pause hotkey picker (
+e1d8aa)
+
+### Documentation
+
+- point the pause key setting at the Hotkeys & Advanced tab (
+d93b8d)
+
 ## [1.0.1] - 2026-10-14
 
 ### Fixed
