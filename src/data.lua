@@ -1,10 +1,10 @@
 local data = {}
 
-data.HOTKEY_NONE = ""
+-- The pause key is a Lib-managed hotkey (module.hotkeys); its binding keeps the "Hotkey" storage
+-- alias so saved bindings carry over.
+data.HOTKEY_ID = "TogglePause"
+data.HOTKEY_ALIAS = "Hotkey"
 data.HOTKEY_DEFAULT = "F9"
--- F1 opens the Hell2Modding overlay, so it is not offered.
-data.hotkeyValues = { data.HOTKEY_NONE, "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" }
-data.hotkeyDisplayValues = { [data.HOTKEY_NONE] = "None" }
 
 data.speedPercent = {
     default = 0,
@@ -14,12 +14,6 @@ data.speedPercent = {
 
 function data.buildStorage()
     return {
-        {
-            type = "string",
-            alias = "Hotkey",
-            default = data.HOTKEY_DEFAULT,
-            maxLen = 8,
-        },
         {
             type = "int",
             alias = "SpeedPercent",

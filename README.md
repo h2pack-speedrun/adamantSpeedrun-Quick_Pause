@@ -8,7 +8,7 @@ Part of the [Speedrun modpack](https://thunderstore.io/c/hades-ii/p/adamantSpeed
 
 Quick Pause is a practice and routing tool. Instead of the pause menu, it applies the game's own simulation-speed slowdown, so the world stops (or slows) while the screen stays clear.
 
-- **Pause hotkey:** a key (F5 to F12, F9 by default) that toggles the freeze. It is read every frame while the Hell2Modding overlay is closed. It starts a freeze during plain gameplay only, not over boon screens, the codex or the trait tray, or while you are dead, and it can always end one.
+- **Pause hotkey:** a key (F1 to F12, optionally with Ctrl, Shift or Alt; F9 by default) that toggles the freeze. The key is managed by ModpackLib: set it in the module's Hotkeys & Advanced tab, which tells you if another module or the Hell2Modding overlay already uses it. ModpackLib's settings window (adamant-lib menu) lists every module's keys. It starts a freeze during plain gameplay only, not over boon screens, the codex or the trait tray, or while you are dead, and it can always end one.
 - **Speed while paused:** a percentage of normal game speed. 0 is a full freeze.
 - **Block actions while paused:** stops attacks and dashes from queueing up.
 - **PAUSED indicator:** a small badge in the top-left corner while paused. It is drawn by the mod overlay, not the game HUD, so it shows at any speed, including a full freeze.
