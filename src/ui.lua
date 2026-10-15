@@ -6,9 +6,9 @@ local INPUT_TOOLTIP =
     "Block attacks, dashes and other actions while paused so nothing queues up."
 local INDICATOR_TOOLTIP = "Show a PAUSED badge in the top-left corner of the screen while paused."
 
-function module.drawTab(draw, state, data, hotkeys)
+-- The pause key's picker is drawn by ModpackLib in the module header (module.hotkeys).
+function module.drawTab(draw, state, data)
     local widgets = draw.widgets
-    widgets.hotkey(hotkeys.get(data.HOTKEY_ID))
     widgets.slider(state.get("SpeedPercent"), {
         label = "Speed while paused (%)",
         tooltip = SPEED_TOOLTIP,
@@ -28,7 +28,7 @@ end
 
 function module.attach(libModule, data)
     libModule.ui.tab(function(_, ui)
-        return module.drawTab(ui.draw, ui.data, data, ui.hotkeys)
+        return module.drawTab(ui.draw, ui.data, data)
     end)
 end
 
